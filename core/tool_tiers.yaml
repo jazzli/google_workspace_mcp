@@ -200,6 +200,7 @@ reports:
     - list_workspace_audit_activities
   extended:
     - get_workspace_customer_usage
+    - get_workspace_user_usage
   complete: []
 
 vault:

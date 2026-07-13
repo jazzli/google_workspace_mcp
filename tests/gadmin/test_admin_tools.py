@@ -119,3 +119,93 @@ async def test_list_audit_activities_omits_parameter_values_and_ip():
     assert "192.0.2.1" not in serialized
     assert "person@example.com" not in serialized
     assert result["activities"][0]["events"][0]["parameterNames"] == ["USER_EMAIL"]
+
+
+@pytest.mark.asyncio
+async def test_get_workspace_user_usage_is_bounded_and_redacts_identity():
+    service = Mock()
+    usage_resource = Mock()
+    request = Mock()
+    service.userUsageReport.return_value = usage_resource
+    usage_resource.get.return_value = request
+    request.execute.return_value = {
+        "usageReports": [
+            {
+                "date": "2026-07-12",
+                "entity": {
+                    "type": "USER",
+                    "customerId": "C0123",
+                    "userEmail": "person@example.com",
+                    "profileId": "profile-1",
+                },
+                "etag": "private-etag",
+                "parameters": [
+                    {"name": "drive:num_owned_items_delta", "intValue": "7"}
+                ],
+            }
+        ],
+        "nextPageToken": "next",
+    }
+
+    from gadmin.reports_tools import get_workspace_user_usage
+
+    result = json.loads(
+        await _unwrap(get_workspace_user_usage)(
+            service=service,
+            user_google_email="admin@example.com",
+            date="2026-07-12",
+            target_user_key="all",
+            parameters="drive:num_owned_items_delta",
+            max_results=5,
+        )
+    )
+    serialized = json.dumps(result)
+    assert result["count"] == 1
+    assert result["nextPageToken"] == "next"
+    assert "person@example.com" not in serialized
+    assert "profile-1" not in serialized
+    assert "private-etag" not in serialized
+    assert result["usageReports"][0]["parameters"][0]["intValue"] == "7"
+    usage_resource.get.assert_called_once_with(
+        userKey="all",
+        date="2026-07-12",
+        customerId="my_customer",
+        maxResults=5,
+        parameters="drive:num_owned_items_delta",
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_workspace_user_usage_profile_id_requires_opt_in():
+    service = Mock()
+    usage_resource = Mock()
+    request = Mock()
+    service.userUsageReport.return_value = usage_resource
+    usage_resource.get.return_value = request
+    request.execute.return_value = {
+        "usageReports": [
+            {
+                "date": "2026-07-12",
+                "entity": {
+                    "type": "USER",
+                    "customerId": "C0123",
+                    "userEmail": "person@example.com",
+                    "profileId": "profile-1",
+                },
+            }
+        ]
+    }
+
+    from gadmin.reports_tools import get_workspace_user_usage
+
+    result = json.loads(
+        await _unwrap(get_workspace_user_usage)(
+            service=service,
+            user_google_email="admin@example.com",
+            date="2026-07-12",
+            target_user_key="all",
+            include_profile_id=True,
+        )
+    )
+    assert result["usageReports"][0]["entity"]["profileId"] == "profile-1"
+    assert "userEmail" not in result["usageReports"][0]["entity"]
