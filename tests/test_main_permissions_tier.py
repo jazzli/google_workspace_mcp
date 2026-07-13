@@ -14,6 +14,11 @@ os.environ["WORKSPACE_MCP_STATELESS_MODE"] = "false"
 import main
 
 
+def test_administration_services_are_explicitly_opt_in():
+    assert {"admin", "reports", "vault"}.issubset(main.VALID_SERVICES)
+    assert {"admin", "reports", "vault"}.isdisjoint(main.DEFAULT_SERVICES)
+
+
 def test_resolve_permissions_mode_selection_without_tier():
     services = ["gmail", "drive"]
     resolved_services, tier_tool_filter = main.resolve_permissions_mode_selection(

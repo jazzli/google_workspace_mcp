@@ -85,6 +85,36 @@ SCRIPT_EXTERNAL_REQUEST_SCOPE = (
 )
 SCRIPT_SCRIPTAPP_SCOPE = "https://www.googleapis.com/auth/script.scriptapp"
 
+# Google Workspace administration scopes (read-only only).
+ADMIN_DIRECTORY_CUSTOMER_READONLY_SCOPE = (
+    "https://www.googleapis.com/auth/admin.directory.customer.readonly"
+)
+ADMIN_DIRECTORY_DOMAIN_READONLY_SCOPE = (
+    "https://www.googleapis.com/auth/admin.directory.domain.readonly"
+)
+ADMIN_DIRECTORY_USER_READONLY_SCOPE = (
+    "https://www.googleapis.com/auth/admin.directory.user.readonly"
+)
+ADMIN_DIRECTORY_ORGUNIT_READONLY_SCOPE = (
+    "https://www.googleapis.com/auth/admin.directory.orgunit.readonly"
+)
+ADMIN_DIRECTORY_GROUP_READONLY_SCOPE = (
+    "https://www.googleapis.com/auth/admin.directory.group.readonly"
+)
+ADMIN_DIRECTORY_ROLEMANAGEMENT_READONLY_SCOPE = (
+    "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly"
+)
+ADMIN_DIRECTORY_USERSCHEMA_READONLY_SCOPE = (
+    "https://www.googleapis.com/auth/admin.directory.userschema.readonly"
+)
+ADMIN_REPORTS_AUDIT_READONLY_SCOPE = (
+    "https://www.googleapis.com/auth/admin.reports.audit.readonly"
+)
+ADMIN_REPORTS_USAGE_READONLY_SCOPE = (
+    "https://www.googleapis.com/auth/admin.reports.usage.readonly"
+)
+VAULT_EDISCOVERY_READONLY_SCOPE = "https://www.googleapis.com/auth/ediscovery.readonly"
+
 # Google scope hierarchy: broader scopes that implicitly cover narrower ones.
 # See https://developers.google.com/gmail/api/auth/scopes,
 # https://developers.google.com/drive/api/guides/api-specific-auth, etc.
@@ -194,6 +224,23 @@ SCRIPT_SCOPES = [
     DRIVE_FILE_SCOPE,  # Required for list/delete script projects (uses Drive API)
 ]
 
+ADMIN_DIRECTORY_SCOPES = [
+    ADMIN_DIRECTORY_CUSTOMER_READONLY_SCOPE,
+    ADMIN_DIRECTORY_DOMAIN_READONLY_SCOPE,
+    ADMIN_DIRECTORY_USER_READONLY_SCOPE,
+    ADMIN_DIRECTORY_ORGUNIT_READONLY_SCOPE,
+    ADMIN_DIRECTORY_GROUP_READONLY_SCOPE,
+    ADMIN_DIRECTORY_ROLEMANAGEMENT_READONLY_SCOPE,
+    ADMIN_DIRECTORY_USERSCHEMA_READONLY_SCOPE,
+]
+
+ADMIN_REPORTS_SCOPES = [
+    ADMIN_REPORTS_AUDIT_READONLY_SCOPE,
+    ADMIN_REPORTS_USAGE_READONLY_SCOPE,
+]
+
+VAULT_SCOPES = [VAULT_EDISCOVERY_READONLY_SCOPE]
+
 # Tool-to-scopes mapping
 TOOL_SCOPES_MAP = {
     "gmail": GMAIL_SCOPES,
@@ -208,6 +255,9 @@ TOOL_SCOPES_MAP = {
     "contacts": CONTACTS_SCOPES,
     "search": CUSTOM_SEARCH_SCOPES,
     "appscript": SCRIPT_SCOPES,
+    "admin": ADMIN_DIRECTORY_SCOPES,
+    "reports": ADMIN_REPORTS_SCOPES,
+    "vault": VAULT_SCOPES,
 }
 
 # Tool-to-read-only-scopes mapping
@@ -230,6 +280,9 @@ TOOL_READONLY_SCOPES_MAP = {
         SCRIPT_METRICS_SCOPE,
         DRIVE_READONLY_SCOPE,
     ],
+    "admin": ADMIN_DIRECTORY_SCOPES,
+    "reports": ADMIN_REPORTS_SCOPES,
+    "vault": VAULT_SCOPES,
 }
 
 
