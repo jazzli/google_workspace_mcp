@@ -158,8 +158,10 @@ async def get_workspace_user_usage(
     """Get a bounded page of user usage metrics without email identities.
 
     ``target_user_key`` may be ``all``, a primary email, or an immutable profile ID.
-    Email addresses are never returned. Immutable profile IDs are returned only when
-    ``include_profile_id`` is explicitly enabled for a protected inventory workflow.
+    Email addresses and opaque pagination tokens are never returned. Immutable
+    profile IDs are returned only when ``include_profile_id`` is explicitly enabled
+    for a protected inventory workflow. ``hasMore`` indicates whether another page
+    exists; callers may supply a separately protected ``page_token`` to continue.
     """
     params = {
         "userKey": target_user_key,
@@ -184,6 +186,5 @@ async def get_workspace_user_usage(
     }
     if result.get("warnings"):
         response["warnings"] = result["warnings"]
-    if result.get("nextPageToken"):
-        response["nextPageToken"] = result["nextPageToken"]
+    response["hasMore"] = bool(result.get("nextPageToken"))
     return _json(response)

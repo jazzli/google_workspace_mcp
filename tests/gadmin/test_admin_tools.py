@@ -161,7 +161,8 @@ async def test_get_workspace_user_usage_is_bounded_and_redacts_identity():
     )
     serialized = json.dumps(result)
     assert result["count"] == 1
-    assert result["nextPageToken"] == "next"
+    assert result["hasMore"] is True
+    assert "nextPageToken" not in result
     assert "person@example.com" not in serialized
     assert "profile-1" not in serialized
     assert "private-etag" not in serialized
