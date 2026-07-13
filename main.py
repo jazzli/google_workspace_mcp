@@ -158,6 +158,16 @@ def resolve_bind_host_for_transport(transport: str) -> str:
     return "127.0.0.1"
 
 
+def secure_streamable_http_uvicorn_config() -> dict[str, bool]:
+    """Disable request-line logs that can expose OAuth callback credentials.
+
+    Uvicorn access logs include the raw query string. Google OAuth callbacks carry
+    a short-lived authorization code in that query string, so access logging must
+    remain disabled even when general application logging is enabled.
+    """
+    return {"access_log": False}
+
+
 def validate_streamable_http_auth(transport: str) -> None:
     """Reject misconfigured OAuth 2.1 HTTP before starting."""
     if transport != "streamable-http":
@@ -888,6 +898,7 @@ def main():
                 transport="streamable-http",
                 host=host,
                 port=port,
+                uvicorn_config=secure_streamable_http_uvicorn_config(),
                 stateless_http=is_stateless_mode(),
                 show_banner=False,
             )
