@@ -12,11 +12,18 @@ os.environ["MCP_ENABLE_OAUTH21"] = "false"
 os.environ["WORKSPACE_MCP_STATELESS_MODE"] = "false"
 
 import main
+from core.tool_tier_loader import ToolTierLoader
 
 
 def test_administration_services_are_explicitly_opt_in():
     assert {"admin", "reports", "vault"}.issubset(main.VALID_SERVICES)
     assert {"admin", "reports", "vault"}.isdisjoint(main.DEFAULT_SERVICES)
+
+
+def test_admin_core_tier_includes_bounded_user_review_tool():
+    tools = ToolTierLoader().get_tools_up_to_tier("core", ["admin"])
+    assert "list_workspace_users" in tools
+    assert "list_workspace_users_bounded_review" in tools
 
 
 def test_resolve_permissions_mode_selection_without_tier():

@@ -130,6 +130,73 @@ async def list_workspace_users(
 
 
 @server.tool(
+    title="List Workspace Users for Bounded Review", annotations=READ_ONLY_ANNOTATIONS
+)
+@handle_http_errors(
+    "list_workspace_users_bounded_review", is_read_only=True, service_type="admin"
+)
+@require_google_service("admin", "admin_user_read")
+async def list_workspace_users_bounded_review(
+    service,
+    user_google_email: str,
+    max_results: int = 10,
+    query: Optional[str] = None,
+    show_deleted: bool = False,
+) -> str:
+    """List a privacy-minimized first page for a fail-closed user review.
+
+    The response always includes ``hasMore``. Google's opaque page token is
+    used only to derive that boolean and is never included in the MCP response.
+    Each user contains only ``id``, ``primaryEmail``, ``suspended``,
+    ``archived``, ``orgUnitPath``, ``isAdmin``, ``isDelegatedAdmin``, and
+    ``isGuestUser`` when those fields are present in Google's response.
+    A present page token must be a non-empty string or the call fails closed.
+    This method cannot continue pagination; callers must stop when ``hasMore``
+    is true and use a separately authorized workflow if more data is required.
+    """
+    params = {
+        "customer": "my_customer",
+        "maxResults": _bounded_page_size(max_results),
+        "orderBy": "email",
+        "projection": "basic",
+        "showDeleted": show_deleted,
+        "fields": (
+            "nextPageToken,users("
+            "id,primaryEmail,suspended,archived,orgUnitPath,isAdmin,"
+            "isDelegatedAdmin,isGuestUser)"
+        ),
+    }
+    if query:
+        params["query"] = query
+
+    result = await asyncio.to_thread(service.users().list(**params).execute)
+    if "nextPageToken" in result:
+        token = result["nextPageToken"]
+        if not isinstance(token, str) or token == "":
+            raise ValueError("nextPageToken must be a non-empty string when present")
+    else:
+        token = None
+
+    users = [
+        _select(
+            user,
+            (
+                "id",
+                "primaryEmail",
+                "suspended",
+                "archived",
+                "orgUnitPath",
+                "isAdmin",
+                "isDelegatedAdmin",
+                "isGuestUser",
+            ),
+        )
+        for user in result.get("users", [])
+    ]
+    return _json({"users": users, "count": len(users), "hasMore": bool(token)})
+
+
+@server.tool(
     title="List Workspace Organizational Units", annotations=READ_ONLY_ANNOTATIONS
 )
 @handle_http_errors(

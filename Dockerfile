@@ -12,6 +12,9 @@ RUN pip install --no-cache-dir uv
 
 COPY . .
 
+# Fail closed if the tracked local OAuth template ever enters the image.
+RUN test ! -e /app/.env.oauth21 && test ! -L /app/.env.oauth21
+
 # Install Python dependencies using uv sync
 RUN uv sync --frozen --no-dev --extra disk
 

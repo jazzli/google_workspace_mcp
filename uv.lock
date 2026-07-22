@@ -2197,7 +2197,7 @@ wheels = [
 
 [[package]]
 name = "workspace-mcp"
-version = "1.21.2"
+version = "1.21.2+gwdap.r1a2.1"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
