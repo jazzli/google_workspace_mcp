@@ -127,6 +127,10 @@ def test_resolve_bind_host_preserves_oauth21_streamable_http_default(monkeypatch
     assert main.resolve_bind_host_for_transport("streamable-http") == "0.0.0.0"
 
 
+def test_streamable_http_disables_access_logs_to_protect_oauth_codes():
+    assert main.secure_streamable_http_uvicorn_config() == {"access_log": False}
+
+
 def test_validate_streamable_http_auth_rejects_unconfigured_oauth21(
     monkeypatch, capsys
 ):
