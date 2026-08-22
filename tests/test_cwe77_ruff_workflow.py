@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import tomllib
 from typing import Any, Dict, Tuple
 
 import yaml
@@ -23,6 +24,7 @@ import yaml
 # Resolve the repo root (one level up from tests/)
 REPO_ROOT: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKFLOW_PATH: str = os.path.join(REPO_ROOT, ".github", "workflows", "ruff.yml")
+LOCKFILE_PATH: str = os.path.join(REPO_ROOT, "uv.lock")
 
 # Commands that resolve and execute the project's own build backend /
 # pyproject.toml hooks. These must NOT run on untrusted fork PR code.
@@ -79,6 +81,18 @@ def _workflow_has_write_permission(wf: Dict[str, Any]) -> bool:
 def _runs_project_install(run_cmd: str) -> bool:
     """Return True when a shell command installs the local project."""
     return any(pattern.search(run_cmd) for pattern in PROJECT_INSTALL_COMMANDS)
+
+
+def _locked_ruff_version() -> str:
+    """Return the single Ruff version established by the repository lockfile."""
+    with open(LOCKFILE_PATH, "rb") as lockfile:
+        packages: list[Dict[str, Any]] = tomllib.load(lockfile).get("package", [])
+
+    versions = {
+        str(package["version"]) for package in packages if package.get("name") == "ruff"
+    }
+    assert len(versions) == 1, "uv.lock must establish exactly one Ruff version"
+    return versions.pop()
 
 
 def test_project_install_matcher_detects_common_variants() -> None:
@@ -172,6 +186,26 @@ def test_workflow_has_no_repository_mutation_commands() -> None:
                 )
 
 
+def test_ruff_commands_pin_the_locked_version() -> None:
+    """Ruff CI must not drift to an unverified release between workflow runs."""
+    wf, _raw = load_workflow(WORKFLOW_PATH)
+
+    ruff_commands = [
+        line.strip()
+        for job in wf.get("jobs", {}).values()
+        for step in job.get("steps", [])
+        for line in str(step.get("run", "")).splitlines()
+        if re.search(r"\bruff\s+(?:check|format)\b", line)
+    ]
+    assert ruff_commands, "Ruff workflow has no lint or format commands"
+
+    expected_pin = f"--from ruff=={_locked_ruff_version()}"
+    for command in ruff_commands:
+        assert expected_pin in command, (
+            f"Ruff command is not pinned to uv.lock ({expected_pin}): {command!r}"
+        )
+
+
 def test_push_trigger_runs_ruff_validation() -> None:
     """If the workflow listens for pushes to main, the validation job must run."""
     wf, _raw = load_workflow(WORKFLOW_PATH)
@@ -198,6 +232,7 @@ if __name__ == "__main__":
         test_workflow_has_no_project_install_commands,
         test_workflow_permissions_are_read_only,
         test_workflow_has_no_repository_mutation_commands,
+        test_ruff_commands_pin_the_locked_version,
         test_push_trigger_runs_ruff_validation,
     ]
 

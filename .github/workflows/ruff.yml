@@ -23,6 +23,8 @@ jobs:
       # Use `uvx` so we run ruff in an isolated environment without invoking
       # the project's build backend or executing pyproject.toml hooks. This
       # keeps the validation step safe to run on untrusted fork PR code.
+      # Pin the version established by uv.lock so a new Ruff release cannot
+      # change the gate between otherwise identical workflow runs.
       run: |
-        uvx ruff check
-        uvx ruff format --check
+        uvx --from ruff==0.15.10 ruff check
+        uvx --from ruff==0.15.10 ruff format --check
