@@ -1,6 +1,4 @@
-"""
-Test that the ruff.yml GitHub Actions workflow does NOT check out
-attacker-controlled code from fork PRs (CWE-77).
+"""Verify that the Ruff workflow remains read-only and fork-safe.
 
 The vulnerability: the workflow uses pull_request trigger with
   repository: ${{ github.event.pull_request.head.repo.full_name }}
@@ -8,10 +6,9 @@ which checks out the fork's code directly. An attacker can poison
 pyproject.toml or inject malicious ruff plugins to achieve code execution
 with the workflow's contents:write GITHUB_TOKEN.
 
-The fix: remove the explicit repository/ref override so `actions/checkout`
-uses the default merge commit ref (github.sha) for pull_request events,
-and avoid project-aware installers (`uv sync`, `pip install .`) on the
-fork-facing validation job so attacker-controlled build hooks cannot run.
+The enforced boundary: use the default pull-request merge ref, avoid
+project-aware installers, grant no write permissions, and report Ruff
+violations without rewriting or pushing repository content.
 """
 
 from __future__ import annotations
@@ -19,6 +16,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import tomllib
 from typing import Any, Dict, Tuple
 
 import yaml
@@ -26,6 +24,7 @@ import yaml
 # Resolve the repo root (one level up from tests/)
 REPO_ROOT: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKFLOW_PATH: str = os.path.join(REPO_ROOT, ".github", "workflows", "ruff.yml")
+LOCKFILE_PATH: str = os.path.join(REPO_ROOT, "uv.lock")
 
 # Commands that resolve and execute the project's own build backend /
 # pyproject.toml hooks. These must NOT run on untrusted fork PR code.
@@ -40,6 +39,14 @@ PROJECT_INSTALL_COMMANDS: Tuple[re.Pattern[str], ...] = (
         r"(?:\s\.|(?:-e\s+\.|--editable(?:=|\s+)\.))(?=$|[\s;&|])"
     ),
     re.compile(r"(?:^|[\s;&|])poetry\s+install(?:$|[\s;&|])"),
+)
+
+# Commands that change the checked-out repository or push changes upstream.
+# Ruff validation may inspect files, but it must never rewrite or publish them.
+REPOSITORY_MUTATION_COMMANDS: Tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bruff\s+check\b[^\n]*\s--fix(?:\s|$)"),
+    re.compile(r"\bruff\s+format\b(?![^\n]*--check)"),
+    re.compile(r"\bgit\s+(?:add|commit|push)\b"),
 )
 
 
@@ -71,43 +78,21 @@ def _workflow_has_write_permission(wf: Dict[str, Any]) -> bool:
     return False
 
 
-def _is_same_repo_guard(expr: str) -> bool:
-    """Return True only for exact same-repository pull request guards."""
-    normalized: str = " ".join(expr.split())
-    if normalized.startswith("${{") and normalized.endswith("}}"):
-        normalized = " ".join(normalized[3:-2].split())
-
-    same_repo_expressions = {
-        "github.event.pull_request.head.repo.full_name == github.repository",
-        "github.repository == github.event.pull_request.head.repo.full_name",
-    }
-    return normalized in same_repo_expressions
-
-
 def _runs_project_install(run_cmd: str) -> bool:
     """Return True when a shell command installs the local project."""
     return any(pattern.search(run_cmd) for pattern in PROJECT_INSTALL_COMMANDS)
 
 
-def test_same_repo_guard_matcher_is_strict() -> None:
-    """Same-repo guards must be exact, not broad substring matches."""
-    assert _is_same_repo_guard(
-        "github.event.pull_request.head.repo.full_name == github.repository"
-    )
-    assert _is_same_repo_guard(
-        "github.repository == github.event.pull_request.head.repo.full_name"
-    )
-    assert _is_same_repo_guard(
-        "${{ github.event.pull_request.head.repo.full_name   ==   github.repository }}"
-    )
+def _locked_ruff_version() -> str:
+    """Return the single Ruff version established by the repository lockfile."""
+    with open(LOCKFILE_PATH, "rb") as lockfile:
+        packages: list[Dict[str, Any]] = tomllib.load(lockfile).get("package", [])
 
-    assert not _is_same_repo_guard(
-        "github.event_name == 'pull_request' && "
-        "github.event.pull_request.head.repo.full_name == github.repository"
-    )
-    assert not _is_same_repo_guard(
-        "github.event.pull_request.head.repo.full_name == 'attacker/repo'"
-    )
+    versions = {
+        str(package["version"]) for package in packages if package.get("name") == "ruff"
+    }
+    assert len(versions) == 1, "uv.lock must establish exactly one Ruff version"
+    return versions.pop()
 
 
 def test_project_install_matcher_detects_common_variants() -> None:
@@ -145,70 +130,79 @@ def test_no_fork_repo_checkout() -> None:
                 )
 
 
-def test_uv_sync_not_on_fork_prs() -> None:
-    """Any project-aware install step (uv sync, pip install ., etc.) must
-    either be absent from fork-reachable jobs or guarded by a fork check on
-    the step itself. We assert directly on the install step rather than on
-    the checkout to catch unguarded installs even when the checkout looks
-    safe."""
+def test_workflow_has_no_project_install_commands() -> None:
+    """Ruff CI must not execute project-controlled build or install hooks."""
     wf, _raw = load_workflow(WORKFLOW_PATH)
 
     jobs: Dict[str, Any] = wf.get("jobs", {})
     for job_name, job in jobs.items():
-        job_if: str = str(job.get("if", ""))
-        job_is_fork_guarded: bool = _is_same_repo_guard(job_if)
-
         steps = job.get("steps", [])
         for step in steps:
             run_cmd: str = str(step.get("run", ""))
-            if not _runs_project_install(run_cmd):
-                continue
-
-            step_if: str = str(step.get("if", ""))
-            step_is_fork_guarded: bool = _is_same_repo_guard(step_if)
-
-            assert job_is_fork_guarded or step_is_fork_guarded, (
+            assert not _runs_project_install(run_cmd), (
                 f"Job '{job_name}' runs a project-aware install "
-                f"({run_cmd.strip().splitlines()[0]!r}) without a fork guard "
-                "on either the job or the step. Attacker-controlled "
-                "pyproject.toml/build hooks could execute on fork PRs."
+                f"({run_cmd.strip().splitlines()[0]!r}) "
+                "and could execute attacker-controlled pyproject.toml/build hooks."
             )
 
 
-def test_no_write_permissions_or_fork_guarded() -> None:
-    """If any job (or the workflow) grants write permissions, that job must
-    not execute fork code: checkout must not point at the fork repo and the
-    job must be guarded by a same-repo `if` condition."""
+def test_workflow_permissions_are_read_only() -> None:
+    """The Ruff workflow must never receive a write-scoped token."""
     wf, _raw = load_workflow(WORKFLOW_PATH)
 
+    workflow_permissions: Any = wf.get("permissions")
+    assert isinstance(workflow_permissions, dict), (
+        "Ruff workflow must declare permissions explicitly"
+    )
+    assert workflow_permissions.get("contents") == "read", (
+        "Ruff workflow must explicitly limit repository contents to read access"
+    )
+
     workflow_has_write: bool = _workflow_has_write_permission(wf)
+    assert not workflow_has_write, "Ruff workflow grants top-level write permission"
+
     jobs: Dict[str, Any] = wf.get("jobs", {})
 
     for job_name, job in jobs.items():
         job_has_write: bool = _job_has_write_permission(job)
-        has_write: bool = workflow_has_write or job_has_write
-        if not has_write:
-            continue
+        assert not job_has_write, (
+            f"Ruff job '{job_name}' grants write permission; lint validation "
+            "must be read-only"
+        )
 
-        job_if: str = str(job.get("if", ""))
-        job_is_fork_guarded: bool = _is_same_repo_guard(job_if)
 
-        steps = job.get("steps", [])
-        for step in steps:
-            uses: str = step.get("uses", "")
-            if "actions/checkout" in uses:
-                with_params: Dict[str, Any] = step.get("with", {})
-                repo_param: str = str(with_params.get("repository", ""))
-                assert "pull_request.head.repo" not in repo_param, (
-                    f"Job '{job_name}' has write permissions AND checks out fork code. "
-                    "This is a critical security issue (CWE-77)."
+def test_workflow_has_no_repository_mutation_commands() -> None:
+    """Ruff CI must report violations without rewriting or pushing code."""
+    wf, _raw = load_workflow(WORKFLOW_PATH)
+
+    jobs: Dict[str, Any] = wf.get("jobs", {})
+    for job_name, job in jobs.items():
+        for step in job.get("steps", []):
+            run_cmd: str = str(step.get("run", ""))
+            for pattern in REPOSITORY_MUTATION_COMMANDS:
+                assert not pattern.search(run_cmd), (
+                    f"Ruff job '{job_name}' contains repository mutation command: "
+                    f"{run_cmd.strip().splitlines()[0]!r}"
                 )
 
-        assert job_is_fork_guarded, (
-            f"Job '{job_name}' has write permissions but lacks a same-repo "
-            "`if` guard. Add `if: github.event.pull_request.head.repo.full_name "
-            "== github.repository` (or equivalent) to prevent fork PRs from "
-            "running with elevated permissions."
+
+def test_ruff_commands_pin_the_locked_version() -> None:
+    """Ruff CI must not drift to an unverified release between workflow runs."""
+    wf, _raw = load_workflow(WORKFLOW_PATH)
+
+    ruff_commands = [
+        line.strip()
+        for job in wf.get("jobs", {}).values()
+        for step in job.get("steps", [])
+        for line in str(step.get("run", "")).splitlines()
+        if re.search(r"\bruff\s+(?:check|format)\b", line)
+    ]
+    assert ruff_commands, "Ruff workflow has no lint or format commands"
+
+    expected_pin = f"--from ruff=={_locked_ruff_version()}"
+    for command in ruff_commands:
+        assert expected_pin in command, (
+            f"Ruff command is not pinned to uv.lock ({expected_pin}): {command!r}"
         )
 
 
@@ -226,17 +220,19 @@ def test_push_trigger_runs_ruff_validation() -> None:
     assert not push_branches or "main" in push_branches
 
     ruff_job: Dict[str, Any] = wf.get("jobs", {}).get("ruff", {})
+    assert ruff_job, "Ruff workflow is missing its validation job"
     ruff_if: str = " ".join(str(ruff_job.get("if", "")).split())
-    assert "github.event_name == 'push'" in ruff_if
+    assert not ruff_if or "github.event_name == 'push'" in ruff_if
 
 
 if __name__ == "__main__":
     tests = [
-        test_same_repo_guard_matcher_is_strict,
         test_project_install_matcher_detects_common_variants,
         test_no_fork_repo_checkout,
-        test_uv_sync_not_on_fork_prs,
-        test_no_write_permissions_or_fork_guarded,
+        test_workflow_has_no_project_install_commands,
+        test_workflow_permissions_are_read_only,
+        test_workflow_has_no_repository_mutation_commands,
+        test_ruff_commands_pin_the_locked_version,
         test_push_trigger_runs_ruff_validation,
     ]
 
