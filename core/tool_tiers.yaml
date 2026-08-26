@@ -180,3 +180,33 @@ appscript:
     - list_script_processes
     - get_script_metrics
   complete: []
+
+admin:
+  core:
+    - get_workspace_customer
+    - list_workspace_domains
+    - list_workspace_users
+    - list_workspace_users_bounded_review
+  extended:
+    - list_workspace_organizational_units
+    - list_workspace_groups
+    - list_workspace_group_members
+  complete:
+    - list_workspace_admin_roles
+    - list_workspace_role_assignments
+    - list_workspace_custom_schemas
+
+reports:
+  core:
+    - list_workspace_audit_activities
+  extended:
+    - get_workspace_customer_usage
+    - get_workspace_user_usage
+  complete: []
+
+vault:
+  core:
+    - list_vault_matters
+  extended:
+    - list_vault_holds
+  complete: []

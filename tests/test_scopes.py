@@ -31,6 +31,9 @@ from auth.scopes import (
     get_scopes_for_tools,
     has_required_scopes,
     set_read_only,
+    ADMIN_DIRECTORY_CUSTOMER_READONLY_SCOPE,
+    ADMIN_REPORTS_AUDIT_READONLY_SCOPE,
+    VAULT_EDISCOVERY_READONLY_SCOPE,
 )
 from auth.permissions import get_scopes_for_permission, set_permissions
 import auth.permissions as permissions_module
@@ -109,6 +112,14 @@ class TestReadOnlyScopes:
         set_read_only(True)
         scopes = get_scopes_for_tools(["sheets"])
         assert DRIVE_READONLY_SCOPE in scopes
+
+    def test_administration_services_are_readonly_only(self):
+        set_read_only(True)
+        assert ADMIN_DIRECTORY_CUSTOMER_READONLY_SCOPE in get_scopes_for_tools(
+            ["admin"]
+        )
+        assert ADMIN_REPORTS_AUDIT_READONLY_SCOPE in get_scopes_for_tools(["reports"])
+        assert VAULT_EDISCOVERY_READONLY_SCOPE in get_scopes_for_tools(["vault"])
 
 
 class TestHasRequiredScopes:

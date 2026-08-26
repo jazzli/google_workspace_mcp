@@ -199,8 +199,19 @@ SERVICE_MODULES = {
     "contacts": "gcontacts.contacts_tools",
     "search": "gsearch.search_tools",
     "appscript": "gappsscript.apps_script_tools",
+    "admin": "gadmin.directory_tools",
+    "reports": "gadmin.reports_tools",
+    "vault": "gvault.vault_tools",
 }
 VALID_SERVICES = frozenset(SERVICE_MODULES)
+
+# Administrative services are deliberately opt-in. This keeps existing
+# end-user deployments from advertising tenant-wide scopes after an upgrade.
+DEFAULT_SERVICES = tuple(
+    service
+    for service in SERVICE_MODULES
+    if service not in {"admin", "reports", "vault"}
+)
 
 
 def safe_print(text):
@@ -587,6 +598,9 @@ def main():
         "contacts": "👤",
         "search": "🔍",
         "appscript": "📜",
+        "admin": "🏢",
+        "reports": "📋",
+        "vault": "🔐",
     }
 
     # Determine which tools to import based on arguments
@@ -622,8 +636,11 @@ def main():
     elif args.tool_tier is not None:
         # Use tier-based tool selection, optionally filtered by services
         try:
+            tier_services = (
+                args.tools if args.tools is not None else list(DEFAULT_SERVICES)
+            )
             tier_tools, suggested_services = resolve_tools_from_tier(
-                args.tool_tier, args.tools
+                args.tool_tier, tier_services
             )
 
             # If --tools specified, use those services; otherwise use all services that have tier tools
@@ -643,8 +660,8 @@ def main():
         # Don't filter individual tools when using explicit service list only
         set_enabled_tool_names(None)
     else:
-        # Default: import all tools
-        tools_to_import = tool_imports.keys()
+        # Default: import end-user tools. Tenant-wide administration is opt-in.
+        tools_to_import = DEFAULT_SERVICES
         # Don't filter individual tools when importing all
         set_enabled_tool_names(None)
 

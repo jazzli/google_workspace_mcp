@@ -64,6 +64,16 @@ from auth.scopes import (
     SCRIPT_DEPLOYMENTS_READONLY_SCOPE,
     SCRIPT_EXTERNAL_REQUEST_SCOPE,
     SCRIPT_SCRIPTAPP_SCOPE,
+    ADMIN_DIRECTORY_CUSTOMER_READONLY_SCOPE,
+    ADMIN_DIRECTORY_DOMAIN_READONLY_SCOPE,
+    ADMIN_DIRECTORY_USER_READONLY_SCOPE,
+    ADMIN_DIRECTORY_ORGUNIT_READONLY_SCOPE,
+    ADMIN_DIRECTORY_GROUP_READONLY_SCOPE,
+    ADMIN_DIRECTORY_ROLEMANAGEMENT_READONLY_SCOPE,
+    ADMIN_DIRECTORY_USERSCHEMA_READONLY_SCOPE,
+    ADMIN_REPORTS_AUDIT_READONLY_SCOPE,
+    ADMIN_REPORTS_USAGE_READONLY_SCOPE,
+    VAULT_EDISCOVERY_READONLY_SCOPE,
     has_required_scopes,
 )
 
@@ -528,6 +538,9 @@ SERVICE_CONFIGS = {
     "people": {"service": "people", "version": "v1"},
     "customsearch": {"service": "customsearch", "version": "v1"},
     "script": {"service": "script", "version": "v1"},
+    "admin": {"service": "admin", "version": "directory_v1"},
+    "reports": {"service": "admin", "version": "reports_v1"},
+    "vault": {"service": "vault", "version": "v1"},
 }
 
 
@@ -583,6 +596,17 @@ SCOPE_GROUPS = {
     "script_deployments_readonly": SCRIPT_DEPLOYMENTS_READONLY_SCOPE,
     "script_run": SCRIPT_EXTERNAL_REQUEST_SCOPE,
     "script_scriptapp": SCRIPT_SCRIPTAPP_SCOPE,
+    # Google Workspace administration scopes (read-only only)
+    "admin_customer_read": ADMIN_DIRECTORY_CUSTOMER_READONLY_SCOPE,
+    "admin_domain_read": ADMIN_DIRECTORY_DOMAIN_READONLY_SCOPE,
+    "admin_user_read": ADMIN_DIRECTORY_USER_READONLY_SCOPE,
+    "admin_orgunit_read": ADMIN_DIRECTORY_ORGUNIT_READONLY_SCOPE,
+    "admin_group_read": ADMIN_DIRECTORY_GROUP_READONLY_SCOPE,
+    "admin_role_read": ADMIN_DIRECTORY_ROLEMANAGEMENT_READONLY_SCOPE,
+    "admin_schema_read": ADMIN_DIRECTORY_USERSCHEMA_READONLY_SCOPE,
+    "reports_audit_read": ADMIN_REPORTS_AUDIT_READONLY_SCOPE,
+    "reports_usage_read": ADMIN_REPORTS_USAGE_READONLY_SCOPE,
+    "vault_ediscovery_read": VAULT_EDISCOVERY_READONLY_SCOPE,
 }
 
 

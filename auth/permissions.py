@@ -53,6 +53,9 @@ from auth.scopes import (
     SCRIPT_DEPLOYMENTS_READONLY_SCOPE,
     SCRIPT_PROCESSES_READONLY_SCOPE,
     SCRIPT_METRICS_SCOPE,
+    ADMIN_DIRECTORY_SCOPES,
+    ADMIN_REPORTS_SCOPES,
+    VAULT_SCOPES,
 )
 
 logger = logging.getLogger(__name__)
@@ -131,6 +134,9 @@ SERVICE_PERMISSION_LEVELS: Dict[str, List[Tuple[str, List[str]]]] = {
             ],
         ),
     ],
+    "admin": [("readonly", ADMIN_DIRECTORY_SCOPES)],
+    "reports": [("readonly", ADMIN_REPORTS_SCOPES)],
+    "vault": [("readonly", VAULT_SCOPES)],
 }
 
 # Actions denied at specific permission levels.
