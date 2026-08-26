@@ -31,17 +31,11 @@ def _bounded_page_size(value: int) -> int:
 
 def _sanitize_usage_report(report: dict, include_profile_id: bool) -> dict:
     """Return usage metrics without email addresses, etags, or other identity fields."""
-    sanitized = {
-        key: report[key]
-        for key in ("date", "parameters")
-        if key in report
-    }
+    sanitized = {key: report[key] for key in ("date", "parameters") if key in report}
     entity = report.get("entity", {})
     if entity:
         sanitized_entity = {
-            key: entity[key]
-            for key in ("type", "customerId")
-            if key in entity
+            key: entity[key] for key in ("type", "customerId") if key in entity
         }
         if include_profile_id and entity.get("profileId"):
             sanitized_entity["profileId"] = entity["profileId"]
@@ -174,9 +168,7 @@ async def get_workspace_user_usage(
     if page_token:
         params["pageToken"] = page_token
 
-    result = await asyncio.to_thread(
-        service.userUsageReport().get(**params).execute
-    )
+    result = await asyncio.to_thread(service.userUsageReport().get(**params).execute)
     response = {
         "usageReports": [
             _sanitize_usage_report(report, include_profile_id)
