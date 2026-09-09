@@ -31,7 +31,7 @@ from core.config import (
 )
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastmcp import FastMCP
-from fastmcp.server.auth.providers.google import GoogleProvider
+from auth.google_oauth_provider import WorkspaceGoogleProvider as GoogleProvider
 from mcp.types import ToolAnnotations
 from starlette.applications import Starlette
 from starlette.datastructures import MutableHeaders
@@ -581,7 +581,7 @@ def configure_server_for_http():
                     "Protected resource metadata points to Google's authorization server"
                 )
             else:
-                # Standard OAuth 2.1 mode: use FastMCP's GoogleProvider
+                # Standard OAuth 2.1 mode: GoogleProvider with public-client discovery.
                 allowed_client_redirect_uris = _parse_allowed_redirect_uris(
                     os.getenv("WORKSPACE_MCP_ALLOWED_CLIENT_REDIRECT_URIS")
                 )

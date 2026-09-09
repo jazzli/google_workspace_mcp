@@ -1076,6 +1076,21 @@ uv run pytest
 
 ### OAuth 2.1 Support (Multi-User Bearer Token Authentication)
 
+In standard GoogleProvider mode, downstream MCP clients may register explicitly
+with `token_endpoint_auth_method: "none"` and use S256 PKCE. This is separate
+from the server's upstream Google OAuth credentials: it does not remove or
+replace `GOOGLE_OAUTH_CLIENT_SECRET` on a confidential Google application.
+
+`auth/google_oauth_provider.py` adds the missing public-client method to
+discovery for the locked FastMCP 3.2.4 / MCP SDK 1.27.0 stack. It preserves the
+other metadata, CIMD support, consent, registration and token handlers, and does
+not affect external-provider mode. Re-evaluate this adapter when upgrading
+either dependency. The offline contract tests in
+`tests/auth/test_google_provider_public_client.py` cover public registration,
+consent routing, PKCE and client binding, one-use codes, token response shapes,
+and refresh-token rotation. They use synthetic upstream data and cannot prove
+Google consent, production health, or persistence across a deployment.
+
 The server includes OAuth 2.1 support for bearer token authentication, enabling multi-user session management. **OAuth 2.1 automatically reuses your existing `GOOGLE_OAUTH_CLIENT_ID` and, for confidential clients, `GOOGLE_OAUTH_CLIENT_SECRET` credentials** - no additional Google-side configuration needed. Public PKCE clients are also supported: if you omit `GOOGLE_OAUTH_CLIENT_SECRET`, set `FASTMCP_SERVER_AUTH_GOOGLE_JWT_SIGNING_KEY` explicitly.
 
 **When to use OAuth 2.1:**
