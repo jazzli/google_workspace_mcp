@@ -28,6 +28,15 @@ repository-scoped workflow token, logs out of GHCR before any selected-source
 test executes, checks that the pulled image ID and source-relative `/app`
 contents match, and repeats the six container tests.
 
+The custom receipt is fetched from the registry with
+[`gh attestation verify --bundle-from-oci`](https://cli.github.com/manual/gh_attestation_verify):
+GitHub's attestations API can reject the custom predicate as a lookup filter even
+when the signed bundle exists. This changes retrieval only. The exact predicate,
+signer workflow, repository, workflow source/ref and hosted-runner constraints
+remain enforced, followed by the complete tested-receipt comparison. A retrieval,
+signature or receipt-validation failure stops verification; there is no fallback
+to unsigned metadata or a weaker policy.
+
 ## Release boundary
 
 Merging these controls does not authorize publication. Keep the GitHub workflow

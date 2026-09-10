@@ -382,6 +382,7 @@ jobs:
             --predicate-type https://slsa.dev/provenance/v1 \
             >/dev/null
           gh attestation verify "oci://${PUBLISHED_IMAGE}" \
+            --bundle-from-oci \
             --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/docker-publish.yml" \
             --source-ref refs/heads/main \
