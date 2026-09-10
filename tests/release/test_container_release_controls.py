@@ -2,7 +2,9 @@ import copy
 import io
 import json
 import subprocess
+import sys
 import tarfile
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -893,6 +895,140 @@ def test_invocation_validation_accepts_full_source_sha_on_trusted_main():
 
 def test_workflow_satisfies_manual_publication_policy():
     run_helper("validate-workflow", "--workflow", str(WORKFLOW))
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    ["verified", "provenance-failure", "custom-failure", "empty", "wrong-receipt"],
+)
+def test_verification_step_fetches_custom_bundle_from_oci_and_fails_closed(
+    tmp_path: Path, outcome: str
+):
+    """Exercise the real shell and receipt validator; fake only the external CLI.
+
+    Catches API-filter retrieval, weakened CLI constraints, swallowed verifier
+    failures (even with plausible stdout), and bypassed receipt validation.
+    This boundary test does not simulate or claim cryptographic verification.
+    """
+    workflow = yaml.load(WORKFLOW.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    step = next(
+        step
+        for step in workflow["jobs"]["verify-published"]["steps"]
+        if step.get("name")
+        == "Verify registry attestations and selected source binding"
+    )
+    receipt = synthetic_receipt()
+    artifact = tmp_path / "release-artifact"
+    artifact.mkdir()
+    (artifact / "build-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+    image = "ghcr.io/example/public-app"
+    digest = "sha256:" + "6" * 64
+    predicate_type = "https://github.com/example/public-app/manual-container-release/v1"
+    statement = {
+        "subject": [{"name": image, "digest": {"sha256": "6" * 64}}],
+        "predicateType": predicate_type,
+        "predicate": {**receipt, "image_name": image, "registry_digest": digest},
+    }
+    if outcome == "wrong-receipt":
+        statement["predicate"]["source_tree"] = "8" * 40
+    verification = (
+        [] if outcome == "empty" else [{"verificationResult": {"statement": statement}}]
+    )
+    (tmp_path / "cli-result.json").write_text(
+        json.dumps(verification), encoding="utf-8"
+    )
+    (tmp_path / "trusted-workflow").symlink_to(ROOT, target_is_directory=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "python3").symlink_to(sys.executable)
+    gh = bin_dir / "gh"
+    gh.write_text(
+        f"#!{sys.executable}\n"
+        + textwrap.dedent("""\
+        import json
+        import os
+        import sys
+        from pathlib import Path
+
+        args = sys.argv[1:]
+        with Path("cli-calls.jsonl").open("a", encoding="utf-8") as log:
+            log.write(json.dumps(args) + "\\n")
+        custom = "--format" in args
+        if custom and "--bundle-from-oci" not in args:
+            sys.exit("HTTP 422: predicate_type invalid predicate type provided")
+        if custom:
+            print(Path("cli-result.json").read_text(encoding="utf-8"))
+        if os.environ["CLI_OUTCOME"] == ("custom-failure" if custom else "provenance-failure"):
+            sys.exit(1)
+        """),
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            "--noprofile",
+            "--norc",
+            "-e",
+            "-o",
+            "pipefail",
+            "-c",
+            step["run"],
+        ],
+        cwd=tmp_path,
+        env={
+            "PATH": str(bin_dir),
+            "RUNNER_TEMP": str(tmp_path),
+            "CLI_OUTCOME": outcome,
+            "GITHUB_REPOSITORY": "example/public-app",
+            "GITHUB_SHA": "7" * 40,
+            "SOURCE_SHA": "1" * 40,
+            "PUBLISHED_IMAGE": image + "@" + digest,
+            "PREDICATE_TYPE": predicate_type,
+            "IMAGE_NAME": image,
+            "DIGEST": digest,
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+    calls = [
+        json.loads(line)
+        for line in (tmp_path / "cli-calls.jsonl").read_text().splitlines()
+    ]
+    # Hand-derived CLI contract: exact subject, signer/source and predicate;
+    # both invocations must preserve it regardless of retrieval mechanism.
+    assert len(calls) == (1 if outcome == "provenance-failure" else 2)
+    for index, args in enumerate(calls):
+        assert args[:3] == ["attestation", "verify", "oci://" + image + "@" + digest]
+        flags = args[3:]
+        assert "--deny-self-hosted-runners" in flags
+        flags.remove("--deny-self-hosted-runners")
+        assert ("--bundle-from-oci" in flags) is bool(index)
+        if index:
+            flags.remove("--bundle-from-oci")
+        expected = {
+            "--repo": "example/public-app",
+            "--signer-workflow": "example/public-app/.github/workflows/docker-publish.yml",
+            "--source-ref": "refs/heads/main",
+            "--source-digest": "7" * 40,
+            "--predicate-type": predicate_type
+            if index
+            else "https://slsa.dev/provenance/v1",
+        }
+        if index:
+            expected["--format"] = "json"
+        assert len(flags) == 2 * len(expected)
+        assert dict(zip(flags[::2], flags[1::2], strict=True)) == expected
+    if outcome == "verified":
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert json.loads(result.stdout) == {"attestation": "verified"}
+    else:
+        assert result.returncode != 0
+        assert '"attestation": "verified"' not in result.stdout
+        if outcome in {"empty", "wrong-receipt"}:
+            assert "complete tested build receipt" in result.stderr
 
 
 @pytest.mark.parametrize(
