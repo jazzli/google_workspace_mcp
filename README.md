@@ -543,6 +543,8 @@ docker run -e TOOL_TIER=core workspace-mcp
 docker run -e TOOLS="gmail drive calendar" workspace-mcp
 ```
 
+Maintainers: registry releases use the separate [manual container publication](docs/container-publication.md) boundary.
+
 **Available Services**: `gmail` • `drive` • `calendar` • `docs` • `sheets` • `forms` • `tasks` • `contacts` • `chat` • `search`
 
 </details>
