@@ -18,14 +18,15 @@ RUN test ! -e /app/.env.oauth21 && test ! -L /app/.env.oauth21
 # Install Python dependencies using uv sync
 RUN uv sync --frozen --no-dev --extra disk
 
-# Create non-root user for security
+# COPY and dependency installation run as root. Keep the runtime immutable to
+# the service user so privileged maintenance can safely trust these paths.
 RUN useradd --create-home --shell /bin/bash app \
-    && chown -R app:app /app
+    && chmod -R go-w /app
 
-# Give read and write access to the store_creds volume
-RUN mkdir -p /app/store_creds \
-    && chown -R app:app /app/store_creds \
-    && chmod 755 /app/store_creds
+# Only data is application-owned. Home-based credentials, logs, attachments,
+# and OAuth storage remain writable under /home/app. Mounted volumes must be
+# provisioned separately; never recursively chown a live data volume at startup.
+RUN install -d -o app -g app -m 700 /app/store_creds
 
 USER app
 
@@ -45,4 +46,6 @@ ENV TOOLS=""
 
 # Use entrypoint for the base command and CMD for args
 ENTRYPOINT ["/bin/sh", "-c"]
-CMD ["uv run main.py --transport streamable-http ${TOOL_TIER:+--tool-tier \"$TOOL_TIER\"} ${TOOLS:+--tools $TOOLS}"]
+# Dependencies are synchronized at build time only. Do not rewrite the protected
+# environment or bytecode at startup; exec also forwards signals to Python.
+CMD ["exec /app/.venv/bin/python -B main.py --transport streamable-http ${TOOL_TIER:+--tool-tier \"$TOOL_TIER\"} ${TOOLS:+--tools $TOOLS}"]

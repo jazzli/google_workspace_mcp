@@ -29,6 +29,7 @@ client_secrets.json
 .mcpregistry_*_token
 mcp_server_debug.log
 .credentials/
+store_creds/
 
 # Cache and temporary files
 __pycache__/
