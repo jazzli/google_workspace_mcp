@@ -1,66 +1,447 @@
-name: Docker Build and Push to GHCR
+name: Manual container publication
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*.*.*'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Reviewed full application commit SHA
+        required: true
+        type: string
 
 permissions: {}
 
+concurrency:
+  group: manual-container-publication
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  PREDICATE_TYPE: https://github.com/${{ github.repository }}/manual-container-release/v1
+  TRIVY_VERSION: 0.74.0
+  TRIVY_LINUX_AMD64_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
 
 jobs:
-  build-and-push:
+  validate-source:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout trusted workflow controls
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted-workflow
+          persist-credentials: false
+
+      - name: Validate trusted manual invocation
+        run: |
+          python3 trusted-workflow/.github/scripts/container_release.py validate-invocation \
+            --event-name "$GITHUB_EVENT_NAME" \
+            --ref "$GITHUB_REF" \
+            --sha "$GITHUB_SHA" \
+            --workflow-sha "$GITHUB_WORKFLOW_SHA" \
+            --source-sha "$SOURCE_SHA"
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+
+      - name: Checkout selected source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require selected source in reviewed main history
+        run: |
+          git -C source fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          python3 trusted-workflow/.github/scripts/container_release.py validate-source \
+            --repository source \
+            --source-sha "$SOURCE_SHA" \
+            --reviewed-ref refs/remotes/origin/main \
+            --expected-repository "$GITHUB_REPOSITORY"
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+
+  build-and-test:
+    needs: validate-source
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - name: Checkout trusted workflow controls
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted-workflow
+          persist-credentials: false
+
+      - name: Checkout selected source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+
+      - name: Install fixed Trivy release
+        run: |
+          archive="$RUNNER_TEMP/trivy.tar.gz"
+          install_dir="$RUNNER_TEMP/trivy-bin"
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_LINUX_AMD64_SHA256}  ${archive}" | sha256sum --check --strict
+          mkdir -p "$install_dir"
+          tar -xzf "$archive" -C "$install_dir" trivy
+          chmod 0755 "$install_dir/trivy"
+          echo "$install_dir" >> "$GITHUB_PATH"
+
+      - name: Revalidate exact clean source context
+        run: |
+          git -C source fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          python3 trusted-workflow/.github/scripts/container_release.py validate-source \
+            --repository source \
+            --source-sha "$SOURCE_SHA" \
+            --reviewed-ref refs/remotes/origin/main \
+            --expected-repository "$GITHUB_REPOSITORY"
+          python3 trusted-workflow/.github/scripts/container_release.py validate-context \
+            --repository source \
+            --source-sha "$SOURCE_SHA"
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+
+      - name: Scan clean public source without disclosing findings
+        run: |
+          command -v trivy >/dev/null || { echo "Required secret scanner is unavailable" >&2; exit 1; }
+          report="$RUNNER_TEMP/source-secret-scan.json"
+          set +e
+          (cd trusted-workflow && trivy fs --scanners secret --skip-db-update --offline-scan --quiet \
+            --format json --output "$report" ../source >/dev/null 2>&1)
+          scan_status=$?
+          set -e
+          python3 trusted-workflow/.github/scripts/container_release.py validate-scan-report --report "$report"
+          test "$scan_status" -eq 0 || { echo "Required secret scan failed" >&2; exit 1; }
+          rm -f "$report"
+
+      - name: Build the release image once
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --load \
+            --metadata-file "$RUNNER_TEMP/build-metadata.json" \
+            --tag workspace-runtime:release \
+            source
+        env:
+          BUILDX_METADATA_PROVENANCE: min
+
+      - name: Save and inspect the exact built image
+        run: |
+          image_archive="$RUNNER_TEMP/workspace-runtime.tar"
+          rootfs_archive="$RUNNER_TEMP/workspace-runtime-rootfs.tar"
+          docker save --output "$image_archive" workspace-runtime:release
+          container_id="$(docker create workspace-runtime:release)"
+          docker export --output "$rootfs_archive" "$container_id"
+          docker rm "$container_id" >/dev/null
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' workspace-runtime:release)" = "linux/amd64"
+          python3 trusted-workflow/.github/scripts/container_release.py validate-image-inventory \
+            --archive "$rootfs_archive"
+          python3 trusted-workflow/.github/scripts/container_release.py validate-image-source \
+            --archive "$rootfs_archive" --source-repository source
+          docker run --rm --platform linux/amd64 --network none --cap-drop ALL \
+            --security-opt no-new-privileges --entrypoint /usr/local/bin/uv \
+            workspace-runtime:release --version > "$RUNNER_TEMP/uv-version.txt"
+
+      - name: Scan the exact built image without disclosing findings
+        run: |
+          command -v trivy >/dev/null || { echo "Required secret scanner is unavailable" >&2; exit 1; }
+          report="$RUNNER_TEMP/image-secret-scan.json"
+          set +e
+          (cd trusted-workflow && trivy image --input "$RUNNER_TEMP/workspace-runtime.tar" \
+            --scanners secret --skip-db-update --offline-scan --quiet --format json --output "$report" \
+            >/dev/null 2>&1)
+          scan_status=$?
+          set -e
+          python3 trusted-workflow/.github/scripts/container_release.py validate-scan-report --report "$report"
+          test "$scan_status" -eq 0 || { echo "Required secret scan failed" >&2; exit 1; }
+          rm -f "$report"
+
+      - name: Test the exact built image and selected source
+        id: test-built-image
+        working-directory: source
+        run: |
+          uv sync --frozen --extra test
+          WORKSPACE_MCP_TEST_IMAGE=workspace-runtime:release \
+            WORKSPACE_MCP_TEST_DOCKER_CONTEXT=default \
+            uv run --frozen --extra test pytest -q -m 'not integration' \
+            --junitxml "$RUNNER_TEMP/non-integration.xml"
+          python3 ../trusted-workflow/.github/scripts/container_release.py validate-pytest-report \
+            --report "$RUNNER_TEMP/non-integration.xml" \
+            --required-container-cases 6
+
+      - name: Create tested-artifact receipt
+        run: |
+          source_tree="$(git -C source rev-parse HEAD^{tree})"
+          image_id="$(docker image inspect --format '{{.Id}}' workspace-runtime:release)"
+          python3 trusted-workflow/.github/scripts/container_release.py create-build-receipt \
+            --source-repository "$GITHUB_REPOSITORY" \
+            --source-sha "$SOURCE_SHA" \
+            --source-tree "$source_tree" \
+            --platform linux/amd64 \
+            --image-id "$image_id" \
+            --archive "$RUNNER_TEMP/workspace-runtime.tar" \
+            --pytest-report "$RUNNER_TEMP/non-integration.xml" \
+            --build-metadata "$RUNNER_TEMP/build-metadata.json" \
+            --uv-version-file "$RUNNER_TEMP/uv-version.txt" \
+            --output "$RUNNER_TEMP/build-receipt.json"
+          mkdir -p "$RUNNER_TEMP/release-artifact"
+          mv "$RUNNER_TEMP/workspace-runtime.tar" "$RUNNER_TEMP/build-receipt.json" \
+            "$RUNNER_TEMP/release-artifact/"
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+
+      - name: Transfer the tested image without rebuilding
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tested-container-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/release-artifact
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  publish:
+    needs: build-and-test
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write
-
+      attestations: write
+    outputs:
+      digest: ${{ steps.promote.outputs.digest }}
+      image_name: ${{ steps.promote.outputs.image_name }}
+      artifact_id: ${{ needs.build-and-test.outputs.artifact-id }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      - name: Checkout trusted workflow controls
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted-workflow
+          persist-credentials: false
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Download the exact tested artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          artifact-ids: ${{ needs.build-and-test.outputs.artifact-id }}
+          path: release-artifact
 
-      - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+      - name: Verify and load the tested artifact
+        run: |
+          python3 trusted-workflow/.github/scripts/container_release.py validate-build-receipt \
+            --receipt release-artifact/build-receipt.json \
+            --archive release-artifact/workspace-runtime.tar \
+            --source-repository "$GITHUB_REPOSITORY" \
+            --source-sha "$SOURCE_SHA" \
+            --platform linux/amd64
+          docker load --input release-artifact/workspace-runtime.tar >/dev/null
+          image_id="$(docker image inspect --format '{{.Id}}' workspace-runtime:release)"
+          python3 trusted-workflow/.github/scripts/container_release.py validate-loaded-image \
+            --receipt release-artifact/build-receipt.json \
+            --image-id "$image_id"
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+
+      - name: Log in with the repository-scoped workflow token
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Push the tested artifact with a run-unique discovery tag
+        id: promote
+        run: |
+          discovery_tag="${IMAGE_NAME}:run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-sha-${SOURCE_SHA}"
+          docker tag workspace-runtime:release "$discovery_tag"
+          docker push "$discovery_tag" 2>&1 | tee "$RUNNER_TEMP/push-output.log"
+          digest="$(python3 trusted-workflow/.github/scripts/container_release.py \
+            extract-push-digest --push-output "$RUNNER_TEMP/push-output.log" | jq -r '.digest')"
+          docker buildx imagetools inspect "${IMAGE_NAME}@${digest}" \
+            --raw > "$RUNNER_TEMP/registry-manifest.json"
+          python3 trusted-workflow/.github/scripts/container_release.py validate-registry-manifest \
+            --manifest "$RUNNER_TEMP/registry-manifest.json" \
+            --receipt release-artifact/build-receipt.json \
+            --digest "$digest"
+          python3 trusted-workflow/.github/scripts/container_release.py create-release-predicate \
+            --build-receipt release-artifact/build-receipt.json \
+            --image-name "$IMAGE_NAME" \
+            --digest "$digest" \
+            --output "$RUNNER_TEMP/release-predicate.json"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "image_name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+      - name: Attest standard build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          subject-name: ${{ steps.promote.outputs.image_name }}
+          subject-digest: ${{ steps.promote.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+
+      - name: Attest selected-source release receipt
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-name: ${{ steps.promote.outputs.image_name }}
+          subject-digest: ${{ steps.promote.outputs.digest }}
+          predicate-type: ${{ env.PREDICATE_TYPE }}
+          predicate-path: ${{ runner.temp }}/release-predicate.json
+          push-to-registry: true
+          create-storage-record: false
+
+  verify-published:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: read
+      packages: read
+    env:
+      PUBLISHED_IMAGE: ${{ needs.publish.outputs.image_name }}@${{ needs.publish.outputs.digest }}
+    steps:
+      - name: Checkout trusted workflow controls
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted-workflow
+          persist-credentials: false
+
+      - name: Checkout selected source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download the retained tested-artifact receipt
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          artifact-ids: ${{ needs.publish.outputs.artifact_id }}
+          path: release-artifact
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+
+      - name: Log in for read-only package verification
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Install fixed Trivy release
+        run: |
+          archive="$RUNNER_TEMP/trivy.tar.gz"
+          install_dir="$RUNNER_TEMP/trivy-bin"
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_LINUX_AMD64_SHA256}  ${archive}" | sha256sum --check --strict
+          mkdir -p "$install_dir"
+          tar -xzf "$archive" -C "$install_dir" trivy
+          chmod 0755 "$install_dir/trivy"
+          echo "$install_dir" >> "$GITHUB_PATH"
+
+      - name: Verify registry attestations and selected source binding
+        run: |
+          gh attestation verify "oci://${PUBLISHED_IMAGE}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/docker-publish.yml" \
+            --source-ref refs/heads/main \
+            --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners \
+            --predicate-type https://slsa.dev/provenance/v1 \
+            >/dev/null
+          gh attestation verify "oci://${PUBLISHED_IMAGE}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/docker-publish.yml" \
+            --source-ref refs/heads/main \
+            --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners \
+            --predicate-type "$PREDICATE_TYPE" \
+            --format json \
+            > "$RUNNER_TEMP/custom-attestation.json"
+          python3 trusted-workflow/.github/scripts/container_release.py validate-attestation \
+            --verification "$RUNNER_TEMP/custom-attestation.json" \
+            --build-receipt release-artifact/build-receipt.json \
+            --predicate-type "$PREDICATE_TYPE" \
+            --source-repository "$GITHUB_REPOSITORY" \
+            --source-sha "$SOURCE_SHA" \
+            --image-name "$IMAGE_NAME" \
+            --digest "$DIGEST"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          DIGEST: ${{ needs.publish.outputs.digest }}
+
+      - name: Pull and inspect the exact published digest
+        run: |
+          docker pull "$PUBLISHED_IMAGE"
+          docker logout "$REGISTRY" >/dev/null
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$PUBLISHED_IMAGE")" = "linux/amd64"
+          container_id="$(docker create "$PUBLISHED_IMAGE")"
+          docker export --output "$RUNNER_TEMP/published-rootfs.tar" "$container_id"
+          docker rm "$container_id" >/dev/null
+          python3 trusted-workflow/.github/scripts/container_release.py validate-image-inventory \
+            --archive "$RUNNER_TEMP/published-rootfs.tar"
+          python3 trusted-workflow/.github/scripts/container_release.py validate-image-source \
+            --archive "$RUNNER_TEMP/published-rootfs.tar" --source-repository source
+          image_id="$(docker image inspect --format '{{.Id}}' "$PUBLISHED_IMAGE")"
+          python3 trusted-workflow/.github/scripts/container_release.py validate-loaded-image \
+            --receipt release-artifact/build-receipt.json \
+            --image-id "$image_id"
+
+      - name: Scan the pulled digest without disclosing findings
+        run: |
+          command -v trivy >/dev/null || { echo "Required secret scanner is unavailable" >&2; exit 1; }
+          report="$RUNNER_TEMP/published-secret-scan.json"
+          set +e
+          (cd trusted-workflow && trivy image "$PUBLISHED_IMAGE" --scanners secret \
+            --skip-db-update --offline-scan --quiet --format json --output "$report" >/dev/null 2>&1)
+          scan_status=$?
+          set -e
+          python3 trusted-workflow/.github/scripts/container_release.py validate-scan-report --report "$report"
+          test "$scan_status" -eq 0 || { echo "Required secret scan failed" >&2; exit 1; }
+          rm -f "$report"
+
+      - name: Test the published image by digest
+        id: test-published-image
+        working-directory: source
+        run: |
+          uv sync --frozen --extra test
+          WORKSPACE_MCP_TEST_IMAGE="$PUBLISHED_IMAGE" \
+            WORKSPACE_MCP_TEST_DOCKER_CONTEXT=default \
+            uv run --frozen --extra test pytest -q tests/container/test_runtime_image.py \
+            --junitxml "$RUNNER_TEMP/published-container.xml"
+          python3 ../trusted-workflow/.github/scripts/container_release.py validate-pytest-report \
+            --report "$RUNNER_TEMP/published-container.xml" \
+            --required-container-cases 6
