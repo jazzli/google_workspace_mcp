@@ -1,0 +1,729 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "repository",
+    "runId",
+    "runAttempt",
+    "workflow",
+    "overlay",
+    "base",
+    "images",
+    "archiveSha256",
+    "sourceFiles",
+    "tools",
+    "evidence"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "repository": {
+      "const": "jazzli/google_workspace_mcp"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "maxLength": 20
+    },
+    "runAttempt": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "maxLength": 20
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "commit"
+      ],
+      "properties": {
+        "path": {
+          "const": ".github/workflows/packaged-container-publish.yml"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 40
+        }
+      }
+    },
+    "overlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "tree"
+      ],
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 40
+        },
+        "tree": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 40
+        }
+      }
+    },
+    "base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestDigest",
+        "configDigest",
+        "applicationCommit",
+        "publisherCommit",
+        "runId",
+        "runAttempt"
+      ],
+      "properties": {
+        "manifestDigest": {
+          "const": "sha256:8af597d77f12ec7bf1319354065af3843c09426f4469374f698ee7e675d32f43"
+        },
+        "configDigest": {
+          "const": "sha256:933b5d014a64ec9ff4a6499f3b039659f29d59976b53e9689b09f9c99940f0b0"
+        },
+        "applicationCommit": {
+          "const": "7d7f2a7d714fe0e1e450b8a5267db357d18c4da6"
+        },
+        "publisherCommit": {
+          "const": "e8b8faa42ea91403279393ee0eae8ac5af9424de"
+        },
+        "runId": {
+          "const": "34531455287"
+        },
+        "runAttempt": {
+          "const": "1"
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime",
+        "migration"
+      ],
+      "properties": {
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "configDigest",
+            "diffIds"
+          ],
+          "properties": {
+            "configDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "maxLength": 71
+            },
+            "diffIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "maxLength": 71
+              },
+              "uniqueItems": true,
+              "minItems": 1,
+              "maxItems": 128
+            }
+          }
+        },
+        "migration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "configDigest",
+            "diffIds"
+          ],
+          "properties": {
+            "configDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "maxLength": 71
+            },
+            "diffIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "maxLength": 71
+              },
+              "uniqueItems": true,
+              "minItems": 1,
+              "maxItems": 128
+            }
+          }
+        }
+      }
+    },
+    "archiveSha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "maxLength": 71
+    },
+    "sourceFiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        ".github/scripts/container_release.py",
+        ".github/scripts/packaged-release.schema.json",
+        ".github/scripts/packaged_pipeline.py",
+        ".github/scripts/packaged_release.py",
+        ".github/scripts/packaged_workflow.py",
+        ".github/workflows/packaged-container-publish.yml",
+        "docker/Dockerfile.content-migration",
+        "docker/Dockerfile.runtime",
+        "docker/content_permission_migration.py",
+        "docker/runtime_launcher.py",
+        "pyproject.toml",
+        "tests/container/build_packaged_images.py",
+        "tests/container/packaged_docker.py",
+        "tests/container/packaged_storage_probe.py",
+        "tests/container/rehearse_packaged_pair.mjs",
+        "tests/container/test_packaged_migration.py",
+        "tests/container/test_packaged_runtime.py",
+        "tests/container/test_runtime_image.py",
+        "tests/container/verify_packaged_layers.py",
+        "uv.lock"
+      ],
+      "properties": {
+        ".github/scripts/container_release.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        ".github/scripts/packaged-release.schema.json": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        ".github/scripts/packaged_pipeline.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        ".github/scripts/packaged_release.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        ".github/scripts/packaged_workflow.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        ".github/workflows/packaged-container-publish.yml": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "docker/Dockerfile.content-migration": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "docker/Dockerfile.runtime": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "docker/content_permission_migration.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "docker/runtime_launcher.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "pyproject.toml": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "tests/container/build_packaged_images.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "tests/container/packaged_docker.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "tests/container/packaged_storage_probe.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "tests/container/rehearse_packaged_pair.mjs": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "tests/container/test_packaged_migration.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "tests/container/test_packaged_runtime.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "tests/container/test_runtime_image.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "tests/container/verify_packaged_layers.py": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "uv.lock": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "docker",
+        "buildkit",
+        "python",
+        "node",
+        "scanner"
+      ],
+      "properties": {
+        "docker": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9.+_ /,:()=-]{1,180}$",
+          "maxLength": 180
+        },
+        "buildkit": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9.+_ /,:()=-]{1,180}$",
+          "maxLength": 180
+        },
+        "python": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9.+_ /,:()=-]{1,180}$",
+          "maxLength": 180
+        },
+        "node": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9.+_ /,:()=-]{1,180}$",
+          "maxLength": 180
+        },
+        "scanner": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9.+_ /,:()=-]{1,180}$",
+          "maxLength": 180
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tests",
+        "scans",
+        "layers",
+        "rehearsal"
+      ],
+      "properties": {
+        "tests": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "nonIntegration",
+            "linuxRuntime",
+            "linuxMigration",
+            "runtimeImage",
+            "migrationImage"
+          ],
+          "properties": {
+            "nonIntegration": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sha256",
+                "cases",
+                "passed",
+                "skipped",
+                "failed"
+              ],
+              "properties": {
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "maxLength": 71
+                },
+                "cases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "uniqueItems": true,
+                  "minItems": 1,
+                  "maxItems": 100000
+                },
+                "passed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "skipped": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "failed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                }
+              }
+            },
+            "linuxRuntime": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sha256",
+                "cases",
+                "passed",
+                "skipped",
+                "failed"
+              ],
+              "properties": {
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "maxLength": 71
+                },
+                "cases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "uniqueItems": true,
+                  "minItems": 1,
+                  "maxItems": 100000
+                },
+                "passed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "skipped": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "failed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                }
+              }
+            },
+            "linuxMigration": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sha256",
+                "cases",
+                "passed",
+                "skipped",
+                "failed"
+              ],
+              "properties": {
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "maxLength": 71
+                },
+                "cases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "uniqueItems": true,
+                  "minItems": 1,
+                  "maxItems": 100000
+                },
+                "passed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "skipped": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "failed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                }
+              }
+            },
+            "runtimeImage": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sha256",
+                "cases",
+                "passed",
+                "skipped",
+                "failed"
+              ],
+              "properties": {
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "maxLength": 71
+                },
+                "cases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "uniqueItems": true,
+                  "minItems": 1,
+                  "maxItems": 100000
+                },
+                "passed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "skipped": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "failed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                }
+              }
+            },
+            "migrationImage": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sha256",
+                "cases",
+                "passed",
+                "skipped",
+                "failed"
+              ],
+              "properties": {
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "maxLength": 71
+                },
+                "cases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "uniqueItems": true,
+                  "minItems": 1,
+                  "maxItems": 100000
+                },
+                "passed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "skipped": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "failed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                }
+              }
+            }
+          }
+        },
+        "scans": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "runtime",
+            "migration"
+          ],
+          "properties": {
+            "source": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "maxLength": 71
+            },
+            "runtime": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "maxLength": 71
+            },
+            "migration": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "maxLength": 71
+            }
+          }
+        },
+        "layers": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "maxLength": 71
+        },
+        "rehearsal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sha256",
+            "stages",
+            "faults",
+            "cleanup"
+          ],
+          "properties": {
+            "sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "maxLength": 71
+            },
+            "stages": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "uniqueItems": true,
+              "minItems": 1,
+              "maxItems": 8
+            },
+            "faults": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "uniqueItems": true,
+              "minItems": 1,
+              "maxItems": 9
+            },
+            "cleanup": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "containers",
+                "volumes"
+              ],
+              "properties": {
+                "containers": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "owned",
+                    "absent",
+                    "present",
+                    "unknown"
+                  ],
+                  "properties": {
+                    "owned": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000
+                    },
+                    "absent": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000
+                    },
+                    "present": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000
+                    },
+                    "unknown": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000
+                    }
+                  }
+                },
+                "volumes": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "owned",
+                    "absent",
+                    "present",
+                    "unknown"
+                  ],
+                  "properties": {
+                    "owned": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000
+                    },
+                    "absent": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000
+                    },
+                    "present": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000
+                    },
+                    "unknown": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

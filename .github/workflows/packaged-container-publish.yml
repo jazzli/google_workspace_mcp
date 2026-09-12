@@ -1,0 +1,396 @@
+{
+  "name": "Manual packaged container publication",
+  "on": {
+    "workflow_dispatch": {
+      "inputs": {
+        "source_sha": {
+          "description": "Reviewed full overlay and workflow commit SHA",
+          "required": true,
+          "type": "string"
+        }
+      }
+    }
+  },
+  "permissions": {},
+  "concurrency": {
+    "group": "manual-container-publication",
+    "cancel-in-progress": false
+  },
+  "env": {
+    "SOURCE_SHA": "${{ inputs.source_sha }}"
+  },
+  "jobs": {
+    "validate": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 5,
+      "permissions": {
+        "contents": "read"
+      },
+      "steps": [
+        {
+          "name": "Checkout exact reviewed workflow/source",
+          "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+          "with": {
+            "ref": "${{ github.workflow_sha }}",
+            "path": "source",
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Set up Python",
+          "uses": "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Validate complete workflow contract",
+          "run": "python3 source/.github/scripts/packaged_release.py validate-workflow --workflow source/.github/workflows/packaged-container-publish.yml"
+        },
+        {
+          "name": "Execute fixed validate boundary",
+          "id": "phase",
+          "run": "python3 source/.github/scripts/packaged_pipeline.py validate",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          }
+        }
+      ]
+    },
+    "build-test": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 30,
+      "permissions": {
+        "contents": "read"
+      },
+      "steps": [
+        {
+          "name": "Checkout exact reviewed workflow/source",
+          "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+          "with": {
+            "ref": "${{ github.workflow_sha }}",
+            "path": "source",
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Set up Python",
+          "uses": "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Checkout immutable base application source",
+          "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+          "with": {
+            "ref": "7d7f2a7d714fe0e1e450b8a5267db357d18c4da6",
+            "path": "base-source",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Set up Node",
+          "uses": "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "with": {
+            "node-version": "22.23.2"
+          }
+        },
+        {
+          "name": "Set up uv",
+          "uses": "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78",
+          "with": {}
+        },
+        {
+          "name": "Install checksum-pinned scanner",
+          "shell": "bash",
+          "run": "set -euo pipefail\narchive=\"$RUNNER_TEMP/trivy.tar.gz\"\ninstall_dir=\"$RUNNER_TEMP/trivy-bin\"\ncurl --fail --show-error --silent --location --proto '=https' --tlsv1.2 --output \"$archive\" \"https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_Linux-64bit.tar.gz\"\necho \"2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a  $archive\" | sha256sum --check --strict\nmkdir -p \"$install_dir\"\ntar -xzf \"$archive\" -C \"$install_dir\" trivy\nchmod 0755 \"$install_dir/trivy\"\necho \"$install_dir\" >> \"$GITHUB_PATH\"\n"
+        },
+        {
+          "name": "Install frozen test dependencies",
+          "working-directory": "source",
+          "run": "uv sync --frozen --extra test"
+        },
+        {
+          "name": "Validate complete workflow contract",
+          "run": "python3 source/.github/scripts/packaged_release.py validate-workflow --workflow source/.github/workflows/packaged-container-publish.yml"
+        },
+        {
+          "name": "Execute fixed build-test boundary",
+          "id": "phase",
+          "run": "python3 source/.github/scripts/packaged_pipeline.py build-test",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          }
+        },
+        {
+          "name": "Transfer tested pair without rebuilding",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "tested-pair-${{ github.run_id }}-${{ github.run_attempt }}",
+            "path": "${{ runner.temp }}/packaged-pair",
+            "if-no-files-found": "error",
+            "retention-days": 14,
+            "compression-level": 0
+          },
+          "id": "tested-pair"
+        }
+      ],
+      "needs": "validate",
+      "outputs": {
+        "artifact_id": "${{ steps.tested-pair.outputs.artifact-id }}"
+      }
+    },
+    "publish": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 15,
+      "permissions": {
+        "contents": "read",
+        "packages": "write",
+        "id-token": "write",
+        "attestations": "write"
+      },
+      "steps": [
+        {
+          "name": "Checkout exact reviewed workflow/source",
+          "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+          "with": {
+            "ref": "${{ github.workflow_sha }}",
+            "path": "source",
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Set up Python",
+          "uses": "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Download exact tested pair from this run",
+          "uses": "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0",
+          "with": {
+            "artifact-ids": "${{ needs.build-test.outputs.artifact_id }}",
+            "path": "${{ runner.temp }}/packaged-pair"
+          }
+        },
+        {
+          "name": "Log in with job-scoped registry permissions",
+          "uses": "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9",
+          "with": {
+            "registry": "ghcr.io",
+            "username": "${{ github.actor }}",
+            "password": "${{ github.token }}"
+          }
+        },
+        {
+          "name": "Validate complete workflow contract",
+          "run": "python3 source/.github/scripts/packaged_release.py validate-workflow --workflow source/.github/workflows/packaged-container-publish.yml"
+        },
+        {
+          "name": "Execute fixed publish boundary",
+          "id": "phase",
+          "run": "python3 source/.github/scripts/packaged_pipeline.py publish",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          }
+        },
+        {
+          "name": "Attest runtime standard provenance",
+          "uses": "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+          "with": {
+            "subject-name": "ghcr.io/jazzli/google_workspace_mcp",
+            "subject-digest": "${{ steps.phase.outputs.runtime_digest }}",
+            "push-to-registry": true,
+            "create-storage-record": false
+          }
+        },
+        {
+          "name": "Attest runtime exact pair receipt",
+          "uses": "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+          "with": {
+            "subject-name": "ghcr.io/jazzli/google_workspace_mcp",
+            "subject-digest": "${{ steps.phase.outputs.runtime_digest }}",
+            "push-to-registry": true,
+            "create-storage-record": false,
+            "predicate-type": "https://github.com/jazzli/google_workspace_mcp/packaged-container-release/v1",
+            "predicate-path": "${{ runner.temp }}/packaged-published/runtime-predicate.json"
+          }
+        },
+        {
+          "name": "Attest migration standard provenance",
+          "uses": "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+          "with": {
+            "subject-name": "ghcr.io/jazzli/google_workspace_mcp",
+            "subject-digest": "${{ steps.phase.outputs.migration_digest }}",
+            "push-to-registry": true,
+            "create-storage-record": false
+          }
+        },
+        {
+          "name": "Attest migration exact pair receipt",
+          "uses": "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+          "with": {
+            "subject-name": "ghcr.io/jazzli/google_workspace_mcp",
+            "subject-digest": "${{ steps.phase.outputs.migration_digest }}",
+            "push-to-registry": true,
+            "create-storage-record": false,
+            "predicate-type": "https://github.com/jazzli/google_workspace_mcp/packaged-container-release/v1",
+            "predicate-path": "${{ runner.temp }}/packaged-published/migration-predicate.json"
+          }
+        },
+        {
+          "name": "Retain known partial or complete publication evidence",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "published-pair-${{ github.run_id }}-${{ github.run_attempt }}",
+            "path": "${{ runner.temp }}/packaged-published",
+            "if-no-files-found": "error",
+            "retention-days": 14,
+            "compression-level": 0
+          },
+          "id": "published-pair",
+          "if": "always()"
+        }
+      ],
+      "needs": "build-test",
+      "outputs": {
+        "runtime_digest": "${{ steps.phase.outputs.runtime_digest }}",
+        "migration_digest": "${{ steps.phase.outputs.migration_digest }}",
+        "pair_artifact": "${{ steps.published-pair.outputs.artifact-id }}"
+      }
+    },
+    "verify-published": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 30,
+      "permissions": {
+        "contents": "read",
+        "packages": "read",
+        "attestations": "read"
+      },
+      "steps": [
+        {
+          "name": "Checkout exact reviewed workflow/source",
+          "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+          "with": {
+            "ref": "${{ github.workflow_sha }}",
+            "path": "source",
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Set up Python",
+          "uses": "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Download exact tested pair from this run",
+          "uses": "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0",
+          "with": {
+            "artifact-ids": "${{ needs.build-test.outputs.artifact_id }}",
+            "path": "${{ runner.temp }}/packaged-pair"
+          }
+        },
+        {
+          "name": "Download exact publication record from this run",
+          "uses": "actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0",
+          "with": {
+            "artifact-ids": "${{ needs.publish.outputs.pair_artifact }}",
+            "path": "${{ runner.temp }}/packaged-published"
+          }
+        },
+        {
+          "name": "Log in with job-scoped registry permissions",
+          "uses": "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9",
+          "with": {
+            "registry": "ghcr.io",
+            "username": "${{ github.actor }}",
+            "password": "${{ github.token }}"
+          }
+        },
+        {
+          "name": "Checkout immutable base application source",
+          "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+          "with": {
+            "ref": "7d7f2a7d714fe0e1e450b8a5267db357d18c4da6",
+            "path": "base-source",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Set up Node",
+          "uses": "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+          "with": {
+            "node-version": "22.23.2"
+          }
+        },
+        {
+          "name": "Set up uv",
+          "uses": "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78",
+          "with": {}
+        },
+        {
+          "name": "Install checksum-pinned scanner",
+          "shell": "bash",
+          "run": "set -euo pipefail\narchive=\"$RUNNER_TEMP/trivy.tar.gz\"\ninstall_dir=\"$RUNNER_TEMP/trivy-bin\"\ncurl --fail --show-error --silent --location --proto '=https' --tlsv1.2 --output \"$archive\" \"https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_Linux-64bit.tar.gz\"\necho \"2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a  $archive\" | sha256sum --check --strict\nmkdir -p \"$install_dir\"\ntar -xzf \"$archive\" -C \"$install_dir\" trivy\nchmod 0755 \"$install_dir/trivy\"\necho \"$install_dir\" >> \"$GITHUB_PATH\"\n"
+        },
+        {
+          "name": "Install frozen test dependencies",
+          "working-directory": "source",
+          "run": "uv sync --frozen --extra test"
+        },
+        {
+          "name": "Validate complete workflow contract",
+          "run": "python3 source/.github/scripts/packaged_release.py validate-workflow --workflow source/.github/workflows/packaged-container-publish.yml"
+        },
+        {
+          "name": "Execute fixed verify-published boundary",
+          "id": "phase",
+          "run": "python3 source/.github/scripts/packaged_pipeline.py verify-published",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          }
+        },
+        {
+          "name": "Retain independently verified acceptance evidence",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "accepted-pair-${{ github.run_id }}-${{ github.run_attempt }}",
+            "path": "${{ runner.temp }}/packaged-published",
+            "if-no-files-found": "error",
+            "retention-days": 14,
+            "compression-level": 0
+          },
+          "id": "accepted-pair"
+        },
+        {
+          "name": "Retain fresh post-pull test and cleanup reports",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "post-pull-evidence-${{ github.run_id }}-${{ github.run_attempt }}",
+            "path": "${{ runner.temp }}/packaged-pair/post-pull",
+            "if-no-files-found": "error",
+            "retention-days": 14,
+            "compression-level": 0
+          },
+          "id": "post-pull-evidence"
+        }
+      ],
+      "needs": [
+        "build-test",
+        "publish"
+      ],
+      "env": {
+        "RUNTIME_DIGEST": "${{ needs.publish.outputs.runtime_digest }}",
+        "MIGRATION_DIGEST": "${{ needs.publish.outputs.migration_digest }}"
+      }
+    }
+  }
+}

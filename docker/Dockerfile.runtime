@@ -1,0 +1,6 @@
+FROM ghcr.io/jazzli/google_workspace_mcp@sha256:8af597d77f12ec7bf1319354065af3843c09426f4469374f698ee7e675d32f43
+COPY --chown=0:0 --chmod=0755 runtime_launcher.py /opt/mcp-runtime/runtime_launcher.py
+USER 1000:1000
+ENV HOME=/home/app
+ENTRYPOINT ["/usr/local/bin/python3.11", "-I", "-S", "/opt/mcp-runtime/runtime_launcher.py"]
+CMD ["run"]
