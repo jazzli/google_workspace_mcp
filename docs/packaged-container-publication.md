@@ -81,6 +81,12 @@ bytes **before** Docker load, rechecks loaded identities, and never rebuilds.
 Unique run/attempt/source tags are conveniences, not acceptance identities. Tag
 availability must be positively classified; network or auth errors do not mean
 the tag is absent. Existing tags are never overwritten intentionally.
+Both tags are checked before either is tagged or pushed. The guard accepts only
+exit code 1, empty stdout, and an exact stderr classification (after trimming
+surrounding whitespace): `manifest unknown` or `no such manifest: <queried tag>`.
+An existing manifest, a killed command, conflicting output, authentication or
+network errors, generic 404s and unrecognized messages all fail closed. This
+preflight is not a registry-side atomic reservation of a tag.
 
 ## Provenance and acceptance
 
@@ -112,6 +118,16 @@ overwrite tags, delete published artifacts or treat known pushed bytes as an
 accepted pair. Build, publication and verification artifacts have 14-day
 retention; retain a reviewed non-secret acceptance record in the appropriate
 operational source of truth before that evidence expires.
+
+The pipeline CLI reports `incomplete-not-accepted` with the fixed workflow
+`phase` and a value-free `category`. Known archive, tag-preflight and command
+failures have explicit allowlisted categories; other failures use generic
+validation, I/O or data categories. Raw exception text, subprocess stdout/stderr,
+command arguments and environment values are never included in that diagnostic.
+A category identifies a failure class, not proof that no registry write occurred.
+For older runs that emitted only the generic failure marker, reproducing a
+specific defect does not establish the exact historical failing call. Retain
+that uncertainty and reconcile publication state independently.
 
 The distinct gates are:
 

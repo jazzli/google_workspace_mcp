@@ -27,6 +27,43 @@ import verify_packaged_layers as layers
 
 REHEARSAL_TIMEOUT = 780  # 30s preflight + 600s work + 120s cleanup + 30s exit margin.
 
+# Only these literal classifications may be emitted, never arbitrary exception
+# text, command arguments, environment values or captured command output.
+SAFE_FAILURE_CATEGORIES = {
+    label: label
+    for label in (
+        "github-job-required",
+        "rerun-not-authorized",
+        "external-command-failed",
+        "external-command-unavailable",
+        "archive-mismatch",
+        "archive-config-mismatch",
+        "archive-pair-incomplete",
+        "unusable-image-archive",
+        "loaded-config-mismatch",
+        "tag-availability-unknown",
+        "tag-exists-or-availability-unknown",
+        "push-outcome-unknown",
+        "pulled-config-mismatch",
+    )
+}
+
+
+def failure_category(error):
+    if isinstance(error, r.ReleaseError):
+        if len(error.args) == 1 and type(error.args[0]) is str:
+            return SAFE_FAILURE_CATEGORIES.get(
+                error.args[0], "release-validation-failed"
+            )
+        return "release-validation-failed"
+    if isinstance(error, original.ReleaseError):
+        return "source-validation-failed"
+    if isinstance(error, subprocess.SubprocessError):
+        return "external-command-unavailable"
+    if isinstance(error, OSError):
+        return "io-failed"
+    return "invalid-release-data"
+
 
 def run(argv, *, timeout=120, env=None, stdout_path=None):
     try:
@@ -580,10 +617,13 @@ def require_unused_tag(tag):
         )
     except (OSError, subprocess.SubprocessError):
         raise r.ReleaseError("tag-availability-unknown") from None
-    # A failed request is not evidence of absence. Accept only Docker's exact
-    # classified missing-manifest response for the independently chosen name.
+    # A failed request is not evidence of absence. Docker can pass through the
+    # registry's exact "manifest unknown" classification instead of its own
+    # "no such manifest" message. Reject mixed output, signals and other errors.
     r.require(
-        result.returncode != 0 and result.stderr.strip() == "no such manifest: " + tag,
+        result.returncode == 1
+        and result.stdout == ""
+        and result.stderr.strip() in {"manifest unknown", "no such manifest: " + tag},
         "tag-exists-or-availability-unknown",
     )
 
@@ -787,8 +827,12 @@ def main(argv=None):
         TypeError,
         ValueError,
         subprocess.SubprocessError,
-    ):
-        print("packaged-pipeline-failed:incomplete-not-accepted", file=sys.stderr)
+    ) as error:
+        print(
+            "packaged-pipeline-failed:incomplete-not-accepted "
+            f"phase={args.phase} category={failure_category(error)}",
+            file=sys.stderr,
+        )
         return 1
 
 
