@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover - Windows
     fcntl = None
 
 from fastmcp.server.auth import AccessToken
+from google.auth import _helpers as google_auth_helpers
 from google.oauth2.credentials import Credentials
 from auth.oauth_config import is_external_oauth21_provider
 
@@ -702,7 +703,10 @@ class OAuth21SessionStore:
                     client_id=session_info.get("client_id"),
                     client_secret=session_info.get("client_secret"),
                     scopes=session_info.get("scopes", []),
-                    expiry=session_info.get("expiry"),
+                    expiry=_credentials_expiry(
+                        session_info.get("expiry"),
+                        session_info.get("refresh_token"),
+                    ),
                 )
 
                 logger.debug(f"Retrieved OAuth 2.1 credentials for {user_email}")
@@ -1032,6 +1036,24 @@ def _resolve_client_credentials() -> Tuple[Optional[str], Optional[str]]:
     return client_id, client_secret
 
 
+def _credentials_expiry(
+    expiry: Optional[datetime], refresh_token: Optional[str]
+) -> Optional[datetime]:
+    """Return the expiry to give google-auth for a possibly non-refreshable token.
+
+    google-auth treats credentials as expired REFRESH_THRESHOLD before their real
+    expiry and then tries to refresh them. Without a refresh token that refresh can
+    only fail, so every call in that window raised an authentication error even
+    though Google still accepted the token. Shifting the expiry by the threshold
+    keeps the token usable until it actually expires; the MCP client then renews
+    its own token, which refreshes the upstream Google token through the proxy.
+    The stored session keeps the real expiry.
+    """
+    if expiry is None or refresh_token:
+        return expiry
+    return expiry + google_auth_helpers.REFRESH_THRESHOLD
+
+
 def _build_credentials_from_provider(
     access_token: AccessToken,
 ) -> Optional[Credentials]:
@@ -1064,15 +1086,16 @@ def _build_credentials_from_provider(
             expiry = None
 
     scopes = getattr(access_entry, "scopes", None)
+    refresh_token = refresh_token_obj.token if refresh_token_obj else None
 
     return Credentials(
         token=access_token.token,
-        refresh_token=refresh_token_obj.token if refresh_token_obj else None,
+        refresh_token=refresh_token,
         token_uri="https://oauth2.googleapis.com/token",
         client_id=client_id,
         client_secret=client_secret,
         scopes=scopes,
-        expiry=expiry,
+        expiry=_credentials_expiry(expiry, refresh_token),
     )
 
 
@@ -1111,11 +1134,14 @@ def ensure_session_from_access_token(
             client_id=client_id,
             client_secret=client_secret,
             scopes=getattr(access_token, "scopes", None),
-            expiry=normalized_expiry,
+            expiry=_credentials_expiry(normalized_expiry, None),
         )
         store_expiry = expiry
     else:
+        # Store the real expiry; _credentials_expiry is applied again on read.
         store_expiry = credentials.expiry
+        if store_expiry is not None and not credentials.refresh_token:
+            store_expiry = store_expiry - google_auth_helpers.REFRESH_THRESHOLD
 
     # Skip session storage for external OAuth 2.1 to prevent memory leak from ephemeral tokens
     if email and not is_external_oauth21_provider():
