@@ -1,4 +1,4 @@
-FROM ghcr.io/jazzli/google_workspace_mcp@sha256:8af597d77f12ec7bf1319354065af3843c09426f4469374f698ee7e675d32f43
+FROM ghcr.io/jazzli/google_workspace_mcp@sha256:5e173bbb83cf42ce099b0fb15352327a3b16c9db8be0c87f4b8bb063d957e304
 COPY --chown=0:0 --chmod=0755 runtime_launcher.py /opt/mcp-runtime/runtime_launcher.py
 USER 1000:1000
 ENV HOME=/home/app

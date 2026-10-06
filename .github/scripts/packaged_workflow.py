@@ -17,7 +17,7 @@ PINS = {
     "login": "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9",
     "attest": "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
 }
-BASE_SHA = "7d7f2a7d714fe0e1e450b8a5267db357d18c4da6"
+BASE_SHA = "98c83e0c57c6bdbac6cfb934b98c6815cbdcc643"
 INSTALL_SCANNER = """set -euo pipefail
 archive="$RUNNER_TEMP/trivy.tar.gz"
 install_dir="$RUNNER_TEMP/trivy-bin"

@@ -9,7 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 const PY = "/usr/local/bin/python3.11";
 const LAUNCHER = "/opt/mcp-runtime/runtime_launcher.py";
 const HELPER = "/opt/mcp-runtime/content_permission_migration.py";
-const BASE = "sha256:933b5d014a64ec9ff4a6499f3b039659f29d59976b53e9689b09f9c99940f0b0";
+const BASE = "sha256:103beb53d781a1c70e9955094cafa8571034f87354e28ab7a7b65add6e88cf28";
 const PREFIX = "packaged-rehearsal";
 const LOCAL = /^sha256:[0-9a-f]{64}$/;
 const provider = {

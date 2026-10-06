@@ -25,17 +25,17 @@ PREDICATE = "https://github.com/" + REPOSITORY + "/packaged-container-release/v1
 STANDARD = "https://slsa.dev/provenance/v1"
 ROLES = ("runtime", "migration")
 BASE = {
-    "manifestDigest": "sha256:8af597d77f12ec7bf1319354065af3843c09426f4469374f698ee7e675d32f43",
-    "configDigest": "sha256:933b5d014a64ec9ff4a6499f3b039659f29d59976b53e9689b09f9c99940f0b0",
-    "applicationCommit": "7d7f2a7d714fe0e1e450b8a5267db357d18c4da6",
-    "publisherCommit": "e8b8faa42ea91403279393ee0eae8ac5af9424de",
-    "runId": "34531455287",
+    "manifestDigest": "sha256:5e173bbb83cf42ce099b0fb15352327a3b16c9db8be0c87f4b8bb063d957e304",
+    "configDigest": "sha256:103beb53d781a1c70e9955094cafa8571034f87354e28ab7a7b65add6e88cf28",
+    "applicationCommit": "98c83e0c57c6bdbac6cfb934b98c6815cbdcc643",
+    "publisherCommit": "98c83e0c57c6bdbac6cfb934b98c6815cbdcc643",
+    "runId": "37507095552",
     "runAttempt": "1",
 }
 FIXED_FILES = {
     "docker/runtime_launcher.py": "sha256:408f73ec5770cda6916ac0a94378017cb7a7e254fae381280c36d6b11c782e58",
     "docker/content_permission_migration.py": "sha256:6809742aa6eb4ff3f8eb25f595a4d08a9bc2bd52436ec2fd429889ee90cf2bcd",
-    "docker/Dockerfile.runtime": "sha256:e72d77420290699884f6cf8dc6f4c12422b9eb777177f08a5996310c69812a54",
+    "docker/Dockerfile.runtime": "sha256:44b8086b95e3864700d07ee201ece89034255a4f3991f8c224890fb9369f849a",
     "docker/Dockerfile.content-migration": "sha256:21641864b1ec079d1d5a3432fa94560f73dd0e7b0334ca39a3fbd432848ae2ce",
 }
 SOURCE_FILES = tuple(

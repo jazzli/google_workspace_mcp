@@ -12,8 +12,8 @@ import uuid
 from packaged_docker import select_context
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = "ghcr.io/jazzli/google_workspace_mcp@sha256:8af597d77f12ec7bf1319354065af3843c09426f4469374f698ee7e675d32f43"
-BASE_ID = "sha256:933b5d014a64ec9ff4a6499f3b039659f29d59976b53e9689b09f9c99940f0b0"
+BASE = "ghcr.io/jazzli/google_workspace_mcp@sha256:5e173bbb83cf42ce099b0fb15352327a3b16c9db8be0c87f4b8bb063d957e304"
+BASE_ID = "sha256:103beb53d781a1c70e9955094cafa8571034f87354e28ab7a7b65add6e88cf28"
 DOCKER = ["docker", "--context", "desktop-linux"]
 
 

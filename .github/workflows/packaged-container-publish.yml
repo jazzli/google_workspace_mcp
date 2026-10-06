@@ -86,7 +86,7 @@
           "name": "Checkout immutable base application source",
           "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
           "with": {
-            "ref": "7d7f2a7d714fe0e1e450b8a5267db357d18c4da6",
+            "ref": "98c83e0c57c6bdbac6cfb934b98c6815cbdcc643",
             "path": "base-source",
             "persist-credentials": false
           }
@@ -319,7 +319,7 @@
           "name": "Checkout immutable base application source",
           "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
           "with": {
-            "ref": "7d7f2a7d714fe0e1e450b8a5267db357d18c4da6",
+            "ref": "98c83e0c57c6bdbac6cfb934b98c6815cbdcc643",
             "path": "base-source",
             "persist-credentials": false
           }
