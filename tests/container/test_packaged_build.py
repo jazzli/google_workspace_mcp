@@ -31,7 +31,7 @@ class BuildTests(unittest.TestCase):
         runtime = (ROOT / "docker/Dockerfile.runtime").read_text()
         migration = (ROOT / "docker/Dockerfile.content-migration").read_text()
         self.assertIn(
-            "FROM ghcr.io/jazzli/google_workspace_mcp@sha256:8af597d77f12ec7bf1319354065af3843c09426f4469374f698ee7e675d32f43",
+            "FROM ghcr.io/jazzli/google_workspace_mcp@sha256:5e173bbb83cf42ce099b0fb15352327a3b16c9db8be0c87f4b8bb063d957e304",
             runtime,
         )
         self.assertIn(

@@ -84,19 +84,19 @@
       ],
       "properties": {
         "manifestDigest": {
-          "const": "sha256:8af597d77f12ec7bf1319354065af3843c09426f4469374f698ee7e675d32f43"
+          "const": "sha256:5e173bbb83cf42ce099b0fb15352327a3b16c9db8be0c87f4b8bb063d957e304"
         },
         "configDigest": {
-          "const": "sha256:933b5d014a64ec9ff4a6499f3b039659f29d59976b53e9689b09f9c99940f0b0"
+          "const": "sha256:103beb53d781a1c70e9955094cafa8571034f87354e28ab7a7b65add6e88cf28"
         },
         "applicationCommit": {
-          "const": "7d7f2a7d714fe0e1e450b8a5267db357d18c4da6"
+          "const": "98c83e0c57c6bdbac6cfb934b98c6815cbdcc643"
         },
         "publisherCommit": {
-          "const": "e8b8faa42ea91403279393ee0eae8ac5af9424de"
+          "const": "98c83e0c57c6bdbac6cfb934b98c6815cbdcc643"
         },
         "runId": {
-          "const": "34531455287"
+          "const": "37507095552"
         },
         "runAttempt": {
           "const": "1"
